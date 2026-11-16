@@ -1,19 +1,47 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emberlight Keeper</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e24; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#091d29">
+  <title>TIDEGATE — Hold the harbor</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#06131e;color:#e9f5eb;font-family:system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}button{font:inherit;color:inherit;cursor:pointer;border:1px solid #476570;background:#153744;border-radius:5px;padding:10px 18px}button:hover{background:#235363}button:focus-visible,canvas:focus-visible{outline:3px solid #f4cd7a;outline-offset:3px}button:disabled{opacity:.45;cursor:default}button[aria-pressed=true]{border-color:#f4cd7a;background:#355052}#app{width:min(1280px,100vw);position:relative}header{display:flex;align-items:center;gap:24px;padding:18px 24px;background:#102936;border-bottom:1px solid #3a5a62}h1{font-size:24px;letter-spacing:5px;margin:0 auto 0 0;color:#f4cd7a}.stat{font-variant-numeric:tabular-nums}.stat small{display:block;text-transform:uppercase;letter-spacing:2px;font-size:10px;color:#99b6bb}.stage{position:relative;aspect-ratio:16/9;background:radial-gradient(ellipse at 30% 50%,#174552,#0a2332 70%)}canvas{width:100%;height:100%;display:block}#overlay{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:30px;background:#061722d9}#overlay[hidden]{display:none}#overlay h2{font-family:Georgia,serif;font-size:clamp(28px,5vw,64px);font-weight:normal;margin:0 0 16px;color:#f4cd7a}#overlay p{max-width:540px;line-height:1.7;color:#b9d1d2;margin:0 auto 22px}.eyebrow{letter-spacing:5px;text-transform:uppercase;font-size:12px;margin-bottom:16px;color:#90ced0}.buttons{display:flex;gap:12px;justify-content:center}#primary{background:#d4b16b;color:#0b2530;border-color:#f4cd7a;font-weight:700}footer{padding:14px 24px;background:#102936;border-top:1px solid #3a5a62;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.tower{text-align:left;min-width:155px}.tower small{display:block;color:#afc8cc;font-size:11px;margin-top:4px}#selected{margin-left:auto;font-size:13px;color:#b9d1d2}#notice{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:#09232eec;padding:8px 16px;border-radius:4px;pointer-events:none;white-space:pre-wrap;text-align:center}#notice:empty{display:none}.help{text-align:center;color:#88a7ae;font-size:12px;padding:12px;letter-spacing:.5px}@media(max-width:750px){header{gap:12px;padding:12px}h1{font-size:16px;letter-spacing:2px}header button{padding:7px}footer{padding:10px}.tower{min-width:0;flex:1;padding:8px}.stat{font-size:13px}#selected{margin-left:0}}
+  </style>
 </head>
 <body>
-<canvas id="game" aria-label="Emberlight Keeper: guide the lantern-keeper to catch drifting ember-spirits, dodge shadow-moths, and light all five garden lanterns"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+  <main id="app">
+    <header aria-label="Harbor status">
+      <h1>TIDEGATE</h1>
+      <span class="stat"><small>Pearls</small><b id="pearls">180</b></span>
+      <span class="stat"><small>Wave</small><b id="wave">0 / 10</b></span>
+      <span class="stat"><small>Lives</small><b id="lives">10</b></span>
+      <span class="stat"><small>Score</small><b id="score">0</b></span>
+      <button data-action="pause" id="pause" aria-label="Pause game">Pause</button>
+      <button data-action="mute" id="mute" aria-pressed="false">Sound on</button>
+    </header>
+    <div class="stage">
+      <canvas id="game" width="1280" height="720" tabindex="0" aria-label="Tidegate battlefield. Select a tower with 1, 2, or 3, then click a bank to build."></canvas>
+      <section id="overlay" aria-labelledby="screen-title">
+        <div class="eyebrow">The sea is rising</div>
+        <h2 id="screen-title">Hold the harbor.</h2>
+        <p id="screen-description">Build along the banks. Break the tide. Survive ten waves and the Leviathan.</p>
+        <div class="buttons">
+          <button id="primary" data-action="primary">Start voyage</button>
+          <button id="restart" data-action="restart" hidden>Restart</button>
+        </div>
+      </section>
+      <div id="notice" role="status" aria-live="polite"></div>
+    </div>
+    <footer aria-label="Tower controls">
+      <button class="tower" data-action="tower" data-tower="harpoon" aria-pressed="true">1 · Harpoon <small>55 pearls · swift strikes</small></button>
+      <button class="tower" data-action="tower" data-tower="cannon" aria-pressed="false">2 · Cannon <small>100 pearls · splash damage</small></button>
+      <button class="tower" data-action="tower" data-tower="frost" aria-pressed="false">3 · Frost <small>80 pearls · slowing shots</small></button>
+      <span id="selected">Select a tower, then click a bank.</span>
+      <button id="upgrade" data-action="upgrade" disabled>Upgrade</button>
+    </footer>
+    <div class="help">1 / 2 / 3 select · Click to build or inspect · Click selected tower to upgrade · P / Esc pause · M mute · Space / Enter continue</div>
+  </main>
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>
