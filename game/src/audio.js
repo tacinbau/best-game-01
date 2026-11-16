@@ -1,141 +1,94 @@
-// Synthesized sound only: WebAudio oscillators, no audio files. A soft pad loop plays a slow
-// chord progression while the game runs, and every action has its own short blip. Everything
-// is guarded: with no audio device, or before the first gesture, the game stays silent.
-
-/** Gentle chords for the night garden, as MIDI note numbers. */
-const CHORDS = [
-  [57, 60, 64],
-  [53, 57, 60],
-  [48, 52, 55],
-  [55, 59, 62],
-];
-/** A pentatonic pluck pattern that cycles over the chords, one note a bar. */
-const PLUCKS = [69, 72, 76, 74, 71, 76, 79, 74];
-const BAR_SECONDS = 2.4;
-
-function midiToFreq(note) {
-  return 440 * 2 ** ((note - 69) / 12);
-}
-
-export function createAudio() {
-  let context = null;
-  let master = null;
-  let musicTimer = null;
-  let bar = 0;
-  let muted = false;
-
-  function ensure() {
-    if (context !== null) return true;
-    try {
-      const AudioContext = window.AudioContext ?? window.webkitAudioContext;
-      if (!AudioContext) return false;
-      context = new AudioContext();
-      master = context.createGain();
-      master.gain.value = muted ? 0 : 0.5;
-      master.connect(context.destination);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /** Unlock audio on the first gesture and start the garden's music. */
-  function unlock() {
-    if (!ensure()) return;
-    if (context.state === 'suspended') context.resume().catch(() => {});
-    startMusic();
-  }
-
-  function tone(freq, when, duration, type, volume, slideTo) {
+// Every voice is synthesized; no assets or context are created until a gesture.
+export function createAudio(gestureTarget = globalThis.window) {
+  let context, master, ambience, timer;
+  let muted = false, scene = 'title', disposed = false;
+  const lastCue = new Map();
+  const voices = new Set();
+  function tone(frequency, duration, volume = 0.06, delay = 0, type = 'sine', end = frequency, bus = master) {
+    if (!context || disposed) return;
+    const at = context.currentTime + delay;
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     oscillator.type = type;
-    oscillator.frequency.setValueAtTime(freq, when);
-    if (slideTo) oscillator.frequency.exponentialRampToValueAtTime(slideTo, when + duration);
-    gain.gain.setValueAtTime(0, when);
-    gain.gain.linearRampToValueAtTime(volume, when + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
-    oscillator.connect(gain);
-    gain.connect(master);
-    oscillator.start(when);
-    oscillator.stop(when + duration + 0.05);
+    oscillator.frequency.setValueAtTime(frequency, at);
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, end), at + duration);
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(volume, at + Math.min(bus === ambience ? 1.6 : 0.025, duration / 4));
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+    oscillator.connect(gain).connect(bus);
+    voices.add(oscillator);
+    oscillator.onended = () => { voices.delete(oscillator); oscillator.disconnect(); gain.disconnect(); };
+    oscillator.start(at); oscillator.stop(at + duration + 0.03);
   }
-
-  function playBar() {
-    if (context === null || context.state !== 'running') return;
-    const now = context.currentTime + 0.05;
-    const chord = CHORDS[bar % CHORDS.length];
-    for (const note of chord) tone(midiToFreq(note), now, BAR_SECONDS * 1.1, 'triangle', 0.045);
-    const pluck = PLUCKS[bar % PLUCKS.length];
-    tone(midiToFreq(pluck), now + 0.15, 0.7, 'sine', 0.06);
-    bar += 1;
-  }
-
-  function startMusic() {
-    if (musicTimer !== null || context === null) return;
-    playBar();
-    musicTimer = window.setInterval(playBar, BAR_SECONDS * 1000);
-  }
-
-  function stopMusic() {
-    if (musicTimer !== null) {
-      window.clearInterval(musicTimer);
-      musicTimer = null;
+  function loop() {
+    if (!context || muted || context.state !== 'running') return;
+    if (scene === 'title') {
+      [130.81, 196, 261.63, 329.63].forEach((note, i) => tone(note, 5.8, 0.018, i * 0.12, 'sine', note, ambience));
+    } else if (scene === 'playing' || scene === 'waveclear') {
+      // Detuned low tones swell like a gentle tide under the combat voices.
+      [73.42, 74.1, 110].forEach((note, i) => tone(note, 5.8, 0.012, i * 0.25, 'sine', note * 1.015, ambience));
     }
   }
-
-  /** A short effect; ignored when audio is not unlocked yet. */
-  function effect(play) {
-    if (context === null || context.state !== 'running') return;
-    try {
-      play(context.currentTime);
-    } catch {
-      // A failed blip never stops the game.
+  function rebuildLoop() {
+    clearInterval(timer);
+    if (!context) return;
+    if (ambience) { ambience.disconnect(); }
+    ambience = context.createGain();
+    ambience.connect(master);
+    loop(); timer = setInterval(loop, 5000);
+  }
+  function unlock() {
+    if (disposed) return;
+    const AudioContext = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!AudioContext) return;
+    if (!context) {
+      try {
+        context = new AudioContext();
+        master = context.createGain(); master.gain.value = muted ? 0 : 0.7;
+        master.connect(context.destination);
+        rebuildLoop();
+      } catch { return; }
+    }
+    if (context.state === 'suspended') context.resume().then(() => rebuildLoop()).catch(() => {});
+  }
+  gestureTarget?.addEventListener('pointerdown', unlock, true);
+  gestureTarget?.addEventListener('keydown', unlock, true);
+  function cue(name, towerType) {
+    if (!context || muted || context.state !== 'running' || disposed) return;
+    const key = name === 'shoot' ? `${name}:${towerType}` : name;
+    const now = context.currentTime;
+    if (now - (lastCue.get(key) ?? -Infinity) < (name === 'shoot' ? 0.07 : name === 'hit' || name === 'kill' ? 0.045 : 0.1)) return;
+    lastCue.set(key, now);
+    const melody = (notes, beat, length, volume = 0.055) => notes.forEach((n, i) => tone(n, length, volume, i * beat));
+    switch (name) {
+      case 'build': tone(420, 0.13, 0.07, 0, 'sine', 700); break;
+      case 'upgrade': melody([523.25, 659.25, 783.99], 0.09, 0.3); break;
+      case 'shoot': {
+        const pitch = { harpoon: 620, cannon: 100, frost: 1100 }[towerType] || 500;
+        tone(pitch, 0.065, towerType === 'cannon' ? 0.045 : 0.025, 0, 'triangle', pitch * 0.5); break;
+      }
+      case 'hit': tone(260, 0.045, 0.025, 0, 'sine', 160); break;
+      case 'kill': tone(480, 0.1, 0.045, 0, 'triangle', 850); break;
+      case 'breach': melody([220, 164.81, 220], 0.16, 0.22, 0.085); break;
+      case 'wave': melody([196, 293.66], 0.22, 0.5); break;
+      case 'clear': melody([392, 493.88, 587.33, 783.99], 0.13, 0.45); break;
+      case 'defeat': melody([261.63, 233.08, 196, 130.81], 0.38, 0.8); break;
+      case 'victory': melody([261.63, 329.63, 392, 523.25, 392, 523.25, 659.25], 0.18, 0.65); break;
     }
   }
-
   return {
-    unlock,
+    cue, unlock,
+    setScene(value) { if (scene !== value) { scene = value; rebuildLoop(); } },
     setMuted(value) {
-      muted = value;
-      if (master !== null) master.gain.value = value ? 0 : 0.5;
+      muted = Boolean(value);
+      if (master) { master.gain.cancelScheduledValues(context.currentTime); master.gain.setTargetAtTime(muted ? 0 : 0.7, context.currentTime, 0.02); }
     },
-    isMuted() {
-      return muted;
-    },
-    stopMusic,
-    catchEmber(combo) {
-      effect((now) => {
-        const base = 660 + Math.min(combo, 10) * 24;
-        tone(base, now, 0.12, 'sine', 0.16);
-        tone(base * 1.5, now + 0.06, 0.14, 'sine', 0.12);
-      });
-    },
-    catchGolden() {
-      effect((now) => {
-        tone(880, now, 0.14, 'sine', 0.16);
-        tone(1108, now + 0.07, 0.14, 'sine', 0.14);
-        tone(1318, now + 0.14, 0.22, 'sine', 0.12);
-      });
-    },
-    hit() {
-      effect((now) => {
-        tone(160, now, 0.3, 'sawtooth', 0.14, 60);
-        tone(90, now, 0.35, 'triangle', 0.16, 45);
-      });
-    },
-    levelUp() {
-      effect((now) => {
-        [523, 659, 784, 1046].forEach((freq, index) => tone(freq, now + index * 0.09, 0.22, 'triangle', 0.13));
-      });
-    },
-    win() {
-      effect((now) => {
-        [523, 659, 784, 1046, 784, 1046, 1318].forEach((freq, index) => tone(freq, now + index * 0.13, 0.3, 'triangle', 0.12));
-      });
-    },
-    click() {
-      effect((now) => tone(520, now, 0.07, 'sine', 0.1));
+    destroy() {
+      disposed = true; clearInterval(timer);
+      gestureTarget?.removeEventListener('pointerdown', unlock, true);
+      gestureTarget?.removeEventListener('keydown', unlock, true);
+      for (const voice of voices) { try { voice.stop(); } catch { /* Already ended. */ } }
+      if (context) context.close().catch(() => {});
     },
   };
 }
