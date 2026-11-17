@@ -1,3 +1,6 @@
+[![make.fun · best-game-01](https://make.fun/badge/best-game-01.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
+[![rank](https://make.fun/badge/best-game-01/tacinbau/best-game-01/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
+[![reward](https://make.fun/badge/best-game-01/tacinbau/best-game-01/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 # TIDEGATE
 
 TIDEGATE is a browser tower-defense game about holding a harbor against creatures following a winding tidal channel. Build on the marked bank plots, combine weapons, and survive all ten waves with at least one of your ten lives intact. Every creature that reaches the harbor costs one life, including the boss.
